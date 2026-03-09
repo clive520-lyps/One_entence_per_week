@@ -16,6 +16,25 @@
       color: #1d4ed8;
       font-weight: bold;
     }
+    
+    /* 客製化進度條樣式 */
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #3b82f6;
+      cursor: pointer;
+      margin-top: -5px;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: #d1d5db;
+      border-radius: 2px;
+    }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-gray-800">
@@ -108,12 +127,17 @@
         <h1 class="text-xl font-bold tracking-wider">英語每週一句</h1>
       </div>
       
-      <!-- 週次下拉選單 -->
-      <div class="w-full sm:w-auto flex items-center gap-2">
-        <label for="weekSelector" class="text-sm font-medium whitespace-nowrap">選擇週次：</label>
-        <select id="weekSelector" onchange="changeWeek()" class="w-full text-gray-800 bg-white border border-transparent rounded px-3 py-1.5 focus:ring-2 focus:ring-blue-300 outline-none font-medium shadow-sm">
+      <!-- 週次下拉選單與前後箭頭 -->
+      <div class="w-full sm:w-auto flex items-center gap-2 justify-center">
+        <button id="prevWeekBtn" onclick="prevWeek()" class="bg-blue-500 hover:bg-blue-400 text-white rounded-full w-8 h-8 flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <select id="weekSelector" onchange="changeWeek()" class="w-32 sm:w-auto text-gray-800 bg-white border border-transparent rounded px-3 py-1.5 focus:ring-2 focus:ring-blue-300 outline-none font-medium shadow-sm text-center">
           <option value="">載入中...</option>
         </select>
+        <button id="nextWeekBtn" onclick="nextWeek()" class="bg-blue-500 hover:bg-blue-400 text-white rounded-full w-8 h-8 flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+          <i class="fas fa-chevron-right"></i>
+        </button>
       </div>
     </div>
 
@@ -151,12 +175,32 @@
           <p id="displayZh" class="text-lg sm:text-xl text-gray-600 font-medium" style="white-space: pre-line;">...</p>
         </div>
 
-        <button id="playBtn" onclick="playAudio()" class="group relative inline-flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-          <i class="fas fa-volume-up text-xl"></i>
-          <span>聆聽發音</span>
-          <!-- 隱藏的音檔元素 -->
+        <!-- 客製化音檔播放器 -->
+        <div class="w-full max-w-md mx-auto bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center gap-4">
+            <!-- 播放/暫停按鈕 -->
+            <button id="customPlayBtn" onclick="togglePlay()" class="flex-shrink-0 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition shadow-md focus:outline-none">
+              <i class="fas fa-play text-lg ml-1" id="playIcon"></i>
+            </button>
+            
+            <div class="flex-grow flex flex-col gap-2">
+              <!-- 時間顯示 -->
+              <div class="flex justify-between items-center px-1">
+                <span id="currentTime" class="text-xs text-gray-500 font-mono font-medium">0:00</span>
+                <div class="flex items-center gap-2">
+                  <!-- 語速控制 -->
+                  <button id="speedBtn" onclick="cycleSpeed()" title="調整語速" class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded hover:bg-blue-200 transition">1.0x</button>
+                  <span id="durationTime" class="text-xs text-gray-500 font-mono font-medium">0:00</span>
+                </div>
+              </div>
+              <!-- 進度條 -->
+              <input type="range" id="progressBar" class="w-full bg-transparent appearance-none" value="0" min="0" max="100" step="0.1" oninput="seekAudio()">
+            </div>
+          </div>
+          <!-- 隱藏的原生音檔元素 -->
           <audio id="audioPlayer" class="hidden"></audio>
-        </button>
+        </div>
+        
         <p id="audioErrorMsg" class="text-red-500 text-sm mt-3 hidden"><i class="fas fa-times-circle mr-1"></i>找不到音檔或網址設定錯誤</p>
       </div>
 
@@ -174,6 +218,10 @@
       gasUrl: '',
       audioUrl: ''
     };
+
+    // 音訊播放器相關變數
+    const playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5];
+    let currentSpeedIdx = 2; // 預設 1.0x
 
     // 完整的 GAS 程式碼字串 (供管理者複製)
     const GAS_CODE_TEMPLATE = `function doGet(e) {
@@ -375,10 +423,13 @@
         // 建立週次選單
         buildWeekSelector();
         
-        // 預設選擇最近的一週 (簡易邏輯：選擇陣列最後一筆，或依日期判斷)
-        // 這裡我們預設顯示第一筆，或由選單觸發
-        document.getElementById('weekSelector').selectedIndex = 0;
+        // 自動偵測當前週次 (依據試算表日期)
+        const targetIndex = autoDetectCurrentWeek();
+        document.getElementById('weekSelector').selectedIndex = targetIndex;
         changeWeek();
+
+        // 初始化音訊播放器事件
+        initAudioPlayer();
 
         // 隱藏 Loading
         document.getElementById('loadingIndicator').classList.add('hidden');
@@ -410,11 +461,59 @@
       });
     }
 
+    function autoDetectCurrentWeek() {
+      const now = new Date().getTime();
+      let targetIndex = 0;
+      
+      // 尋找最後一個日期小於等於今天的週次
+      for (let i = 0; i < allData.length; i++) {
+        if (allData[i]['日期']) {
+          const rowDate = new Date(allData[i]['日期']).getTime();
+          if (rowDate <= now) {
+            targetIndex = i;
+          } else {
+            break; // 因為日期有排序，遇到未來日期即可停止
+          }
+        }
+      }
+      return targetIndex;
+    }
+
+    function prevWeek() {
+      const selector = document.getElementById('weekSelector');
+      if (selector.selectedIndex > 0) {
+        selector.selectedIndex -= 1;
+        changeWeek();
+      }
+    }
+
+    function nextWeek() {
+      const selector = document.getElementById('weekSelector');
+      if (selector.selectedIndex < allData.length - 1) {
+        selector.selectedIndex += 1;
+        changeWeek();
+      }
+    }
+
+    function updateNavButtons() {
+      const selector = document.getElementById('weekSelector');
+      const prevBtn = document.getElementById('prevWeekBtn');
+      const nextBtn = document.getElementById('nextWeekBtn');
+      
+      if(prevBtn && nextBtn) {
+        prevBtn.disabled = selector.selectedIndex <= 0;
+        nextBtn.disabled = selector.selectedIndex >= allData.length - 1;
+      }
+    }
+
     function changeWeek() {
       const selectedIndex = document.getElementById('weekSelector').value;
       if (selectedIndex === "") return;
       
       currentWeekData = allData[selectedIndex];
+      
+      // 更新前後箭頭狀態
+      updateNavButtons();
       
       // 更新 Topic
       document.getElementById('displayTopic').innerText = currentWeekData['Special Topic'] || '每週一句';
@@ -471,10 +570,21 @@
       document.getElementById('displayEn').innerText = enText;
       document.getElementById('displayZh').innerText = zhText;
 
-      // 重置音訊狀態
+      // 重置音訊狀態與介面
       const audioPlayer = document.getElementById('audioPlayer');
       const errorMsg = document.getElementById('audioErrorMsg');
+      const customPlayBtn = document.getElementById('customPlayBtn');
+      const playIcon = document.getElementById('playIcon');
+      
       errorMsg.classList.add('hidden');
+      audioPlayer.pause();
+      if(playIcon) {
+        playIcon.classList.replace('fa-pause', 'fa-play');
+        playIcon.classList.add('ml-1'); // 播放圖示微調置中
+      }
+      document.getElementById('progressBar').value = 0;
+      document.getElementById('currentTime').innerText = "0:00";
+      document.getElementById('durationTime').innerText = "0:00";
       
       // 組合音檔網址
       let audioPath = currentWeekData[`${currentGrade}音`];
@@ -488,40 +598,109 @@
           // 沒有設定 baseUrl 時，直接使用相對路徑(測試用)或原始字串
           audioPlayer.src = audioPath;
         }
-        document.getElementById('playBtn').disabled = false;
-        document.getElementById('playBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+        
+        audioPlayer.load(); // 重新載入音檔
+        customPlayBtn.disabled = false;
+        customPlayBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+        customPlayBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
       } else {
         audioPlayer.src = "";
-        document.getElementById('playBtn').disabled = true;
-        document.getElementById('playBtn').classList.add('opacity-50', 'cursor-not-allowed');
+        customPlayBtn.disabled = true;
+        customPlayBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+        customPlayBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
       }
     }
 
-    function playAudio() {
+    function initAudioPlayer() {
       const audioPlayer = document.getElementById('audioPlayer');
-      const errorMsg = document.getElementById('audioErrorMsg');
-      const icon = document.querySelector('#playBtn i');
+      const progressBar = document.getElementById('progressBar');
+      const currentTimeDisplay = document.getElementById('currentTime');
+      const durationTimeDisplay = document.getElementById('durationTime');
+      const playIcon = document.getElementById('playIcon');
+
+      // 更新進度條與當前時間
+      audioPlayer.addEventListener('timeupdate', () => {
+        if (!isNaN(audioPlayer.duration) && audioPlayer.duration > 0) {
+          progressBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+          currentTimeDisplay.innerText = formatTime(audioPlayer.currentTime);
+        }
+      });
+
+      // 音檔載入完成，設定總時間
+      audioPlayer.addEventListener('loadedmetadata', () => {
+        durationTimeDisplay.innerText = formatTime(audioPlayer.duration);
+        // 保持原先設定的語速
+        audioPlayer.playbackRate = playbackSpeeds[currentSpeedIdx];
+      });
+
+      // 播放結束重置
+      audioPlayer.addEventListener('ended', () => {
+        playIcon.classList.replace('fa-pause', 'fa-play');
+        playIcon.classList.add('ml-1');
+        progressBar.value = 0;
+        currentTimeDisplay.innerText = "0:00";
+        // 強制將播放時間歸零
+        audioPlayer.currentTime = 0;
+      });
       
+      // 處理載入錯誤
+      audioPlayer.addEventListener('error', () => {
+        if(audioPlayer.src && audioPlayer.src !== window.location.href) {
+          document.getElementById('audioErrorMsg').classList.remove('hidden');
+        }
+      });
+    }
+
+    function togglePlay() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const playIcon = document.getElementById('playIcon');
+      const errorMsg = document.getElementById('audioErrorMsg');
+
       if (!audioPlayer.src || audioPlayer.src.endsWith('undefined')) {
          errorMsg.classList.remove('hidden');
          return;
       }
 
-      errorMsg.classList.add('hidden');
-      
-      // 變更圖示狀態
-      icon.classList.remove('fa-volume-up');
-      icon.classList.add('fa-spinner', 'fa-spin');
+      if (audioPlayer.paused) {
+        audioPlayer.play().then(() => {
+          playIcon.classList.replace('fa-play', 'fa-pause');
+          playIcon.classList.remove('ml-1'); // 暫停圖示不需要置中微調
+        }).catch(err => {
+          console.error("播放音檔失敗:", err);
+          errorMsg.classList.remove('hidden');
+        });
+      } else {
+        audioPlayer.pause();
+        playIcon.classList.replace('fa-pause', 'fa-play');
+        playIcon.classList.add('ml-1');
+      }
+    }
 
-      audioPlayer.play().then(() => {
-        icon.classList.remove('fa-spinner', 'fa-spin');
-        icon.classList.add('fa-volume-up');
-      }).catch(err => {
-        console.error("播放音檔失敗:", err);
-        icon.classList.remove('fa-spinner', 'fa-spin');
-        icon.classList.add('fa-volume-up');
-        errorMsg.classList.remove('hidden');
-      });
+    function seekAudio() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const progressBar = document.getElementById('progressBar');
+      if (audioPlayer.duration) {
+        const seekTime = (progressBar.value / 100) * audioPlayer.duration;
+        audioPlayer.currentTime = seekTime;
+      }
+    }
+
+    function cycleSpeed() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const speedBtn = document.getElementById('speedBtn');
+      
+      currentSpeedIdx = (currentSpeedIdx + 1) % playbackSpeeds.length;
+      const newSpeed = playbackSpeeds[currentSpeedIdx];
+      
+      audioPlayer.playbackRate = newSpeed;
+      speedBtn.innerText = newSpeed.toFixed(1) + 'x';
+    }
+
+    function formatTime(seconds) {
+      if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
   </script>
