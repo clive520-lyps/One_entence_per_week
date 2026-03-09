@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英語每週一句</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    /* 隱藏捲軸但保留滾動功能 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    .tab-active {
+      border-bottom: 4px solid #3b82f6;
+      color: #1d4ed8;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-gray-800">
+
+  <!-- ==========================================
+       管理員設定視圖 (Admin View)
+       ========================================== -->
+  <div id="admin-view" class="max-w-4xl mx-auto p-6 hidden">
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div class="bg-blue-600 text-white p-6">
+        <h1 class="text-2xl font-bold"><i class="fas fa-cogs mr-2"></i>英語每週一句 - 管理者設定與內嵌碼產生器</h1>
+        <p class="text-blue-100 mt-2">請在此設定您的 Google Apps Script 與音檔來源，設定完成後即可產生嵌入學校網頁的程式碼。</p>
+      </div>
+
+      <div class="p-6 space-y-8">
+        <!-- 步驟 1：系統設定 -->
+        <section>
+          <h2 class="text-xl font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-sliders-h mr-2"></i>1. 系統設定 (⚙️)</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">GAS 部署網址 (Web App URL)</label>
+              <input type="password" id="gasUrl" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="https://script.google.com/macros/s/..../exec">
+              <p class="text-xs text-gray-500 mt-1">※ 密碼類型輸入框，保護您的網址隱私。資料將儲存於瀏覽器 LocalStorage。</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">音檔根目錄網址 (Audio Base URL)</label>
+              <input type="text" id="audioUrl" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="例如：https://www.yourschool.edu.tw/audio">
+              <p class="text-xs text-gray-500 mt-1">※ 若試算表路徑為 "/1402/W03_G1.mp3"，系統會自動組合成完整網址。</p>
+            </div>
+            <div class="flex gap-4 pt-2">
+              <button onclick="saveSettingsAndGenerate()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition shadow-md">
+                <i class="fas fa-save mr-1"></i> 儲存設定並產生內嵌碼
+              </button>
+              <button onclick="clearSettings()" class="bg-red-50 hover:bg-red-100 text-red-600 px-6 py-2 rounded-lg font-medium transition border border-red-200">
+                <i class="fas fa-trash-alt mr-1"></i> 清除/重置設定
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 步驟 2：內嵌碼產生器 -->
+        <section>
+          <h2 class="text-xl font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-code mr-2"></i>2. 內嵌碼產生器 (💻)</h2>
+          <div class="bg-slate-100 p-4 rounded-lg border border-slate-200">
+            <p class="text-sm text-gray-600 mb-2">請將下方程式碼複製並貼上到學校網頁的 HTML 編輯器中：</p>
+            <textarea id="embedCode" rows="4" class="w-full px-4 py-3 bg-gray-800 text-green-400 font-mono text-sm rounded border-none focus:ring-2 focus:ring-blue-500" readonly placeholder="請先完成上方設定並點擊「儲存設定並產生內嵌碼」..."></textarea>
+            <div class="mt-3 flex justify-end">
+              <button onclick="copyEmbedCode()" class="bg-gray-800 hover:bg-black text-white px-4 py-2 rounded shadow transition text-sm">
+                <i class="fas fa-copy mr-1"></i> 一鍵複製內嵌碼
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 步驟 3：後端說明與程式碼 -->
+        <section>
+          <h2 class="text-xl font-bold border-b pb-2 mb-4 text-gray-700"><i class="fas fa-info-circle mr-2"></i>3. 後端 GAS 部署說明 (ℹ️)</h2>
+          <div class="bg-yellow-50 p-4 rounded-lg text-sm text-yellow-800 mb-4 border border-yellow-200">
+            <strong>部署步驟：</strong>
+            <ol class="list-decimal ml-5 mt-1 space-y-1">
+              <li>在 Google 試算表點選「擴充功能」>「Apps Script」。</li>
+              <li>將下方預設程式碼複製並貼上覆蓋 <code>Code.gs</code>。</li>
+              <li>點擊右上角「部署」>「新增部署作業」。</li>
+              <li>類型選擇「網頁應用程式」，權限設定為<strong>「所有人 (包含匿名使用者)」</strong>。</li>
+              <li>複製產生的網址，並貼到上方「系統設定」的第一格中。</li>
+            </ol>
+          </div>
+          <div class="relative">
+            <textarea id="gasCodeDisplay" rows="8" class="w-full px-4 py-3 bg-gray-50 text-gray-700 font-mono text-xs rounded border focus:ring-0" readonly></textarea>
+            <button onclick="copyGasCode()" class="absolute top-2 right-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-xs transition">
+              <i class="fas fa-copy mr-1"></i> 複製程式碼
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       內嵌視圖 (Widget View) - 給學生看
+       ========================================== -->
+  <div id="widget-view" class="w-full max-w-3xl mx-auto hidden h-full flex flex-col bg-white overflow-hidden shadow-sm sm:rounded-xl sm:border sm:my-4">
+    
+    <!-- 頂部標題與控制列 -->
+    <div class="bg-blue-600 text-white p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-white text-blue-600 p-2 rounded-full h-10 w-10 flex items-center justify-center font-bold text-xl shadow">
+          <i class="fas fa-language"></i>
+        </div>
+        <h1 class="text-xl font-bold tracking-wider">英語每週一句</h1>
+      </div>
+      
+      <!-- 週次下拉選單 -->
+      <div class="w-full sm:w-auto flex items-center gap-2">
+        <label for="weekSelector" class="text-sm font-medium whitespace-nowrap">選擇週次：</label>
+        <select id="weekSelector" onchange="changeWeek()" class="w-full text-gray-800 bg-white border border-transparent rounded px-3 py-1.5 focus:ring-2 focus:ring-blue-300 outline-none font-medium shadow-sm">
+          <option value="">載入中...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 主題顯示區 -->
+    <div class="bg-blue-50 px-6 py-3 border-b border-blue-100 flex items-center justify-center text-center">
+      <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-widest mr-2">Topic</span>
+      <span id="displayTopic" class="text-blue-900 font-medium text-lg">載入中...</span>
+    </div>
+
+    <!-- 年級標籤頁 -->
+    <div class="flex overflow-x-auto no-scrollbar border-b bg-gray-50" id="gradeTabs">
+      <!-- 標籤由 JS 動態產生 -->
+    </div>
+
+    <!-- 內容展示區 -->
+    <div class="p-6 sm:p-10 flex-grow flex flex-col justify-center items-center text-center bg-white relative min-h-[300px]">
+      
+      <!-- Loading 狀態 -->
+      <div id="loadingIndicator" class="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
+        <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-4"></i>
+        <p class="text-gray-500 font-medium">資料載入中，請稍候...</p>
+      </div>
+
+      <!-- 錯誤訊息狀態 -->
+      <div id="errorIndicator" class="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 hidden">
+        <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+        <p id="errorMessage" class="text-gray-600 font-medium px-6 text-center">發生錯誤，請聯絡管理員。</p>
+      </div>
+
+      <!-- 句子內容 -->
+      <div id="contentArea" class="w-full max-w-xl hidden">
+        <div class="mb-8">
+          <p id="displayEn" class="text-3xl sm:text-4xl font-bold text-gray-800 leading-tight mb-4 tracking-wide font-serif" style="white-space: pre-line;">...</p>
+          <div class="h-1 w-16 bg-blue-500 mx-auto rounded mb-4"></div>
+          <p id="displayZh" class="text-lg sm:text-xl text-gray-600 font-medium" style="white-space: pre-line;">...</p>
+        </div>
+
+        <button id="playBtn" onclick="playAudio()" class="group relative inline-flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <i class="fas fa-volume-up text-xl"></i>
+          <span>聆聽發音</span>
+          <!-- 隱藏的音檔元素 -->
+          <audio id="audioPlayer" class="hidden"></audio>
+        </button>
+        <p id="audioErrorMsg" class="text-red-500 text-sm mt-3 hidden"><i class="fas fa-times-circle mr-1"></i>找不到音檔或網址設定錯誤</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 全域變數與初始化
+    // ==========================================
+    let allData = [];
+    let currentWeekData = null;
+    let currentGrade = 'G1';
+    let appSettings = {
+      gasUrl: '',
+      audioUrl: ''
+    };
+
+    // 完整的 GAS 程式碼字串 (供管理者複製)
+    const GAS_CODE_TEMPLATE = `function doGet(e) {
+  try {
+    const sheetName = "11402";
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(sheetName);
+
+    // 自動初始化：若找不到工作表，則自動建立並寫入標題
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      const headers = ["學期","week","日期","Special Topic","G1英","G1中","G1音","G2英","G2中","G2音","G3英","G3中","G3音","G4英","G4中","G4音","G5英","G5中","G5音","G6英","G6中","G6音"];
+      sheet.appendRow(headers);
+      return ContentService.createTextOutput(JSON.stringify({status: "success", message: "已自動建立工作表，請填入資料", data: []}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const data = sheet.getDataRange().getDisplayValues(); // 取得顯示值(包含日期格式)
+    if (data.length <= 1) {
+       return ContentService.createTextOutput(JSON.stringify({status: "success", data: []})).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    const result = rows.map(row => {
+      let obj = {};
+      headers.forEach((header, index) => {
+        let key = header.toString().trim();
+        // 處理特殊狀況：自動將 G12 修正為 G2中
+        if (key === "G12") key = "G2中";
+        obj[key] = row[index];
+      });
+      return obj;
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({status: "success", data: result}))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+    // 系統初始化
+    window.onload = function() {
+      // 將 GAS 程式碼放入 Textarea
+      document.getElementById('gasCodeDisplay').value = GAS_CODE_TEMPLATE;
+
+      // 解析網址參數
+      const urlParams = new URLSearchParams(window.location.search);
+      const isEmbed = urlParams.get('embed') === 'true';
+
+      if (isEmbed) {
+        // --- 內嵌模式 ---
+        document.getElementById('admin-view').style.display = 'none';
+        document.getElementById('widget-view').style.display = 'flex';
+        
+        appSettings.gasUrl = urlParams.get('gas') || '';
+        appSettings.audioUrl = urlParams.get('audio') || '';
+        
+        initWidget();
+      } else {
+        // --- 管理者模式 ---
+        document.getElementById('admin-view').style.display = 'block';
+        document.getElementById('widget-view').style.display = 'none';
+        
+        // 讀取 LocalStorage
+        const savedGasUrl = localStorage.getItem('ew_gasUrl');
+        const savedAudioUrl = localStorage.getItem('ew_audioUrl');
+        
+        if (savedGasUrl) document.getElementById('gasUrl').value = savedGasUrl;
+        if (savedAudioUrl) document.getElementById('audioUrl').value = savedAudioUrl;
+        
+        if (savedGasUrl) saveSettingsAndGenerate(); // 如果有舊設定，自動產生一次內嵌碼
+      }
+    };
+
+    // ==========================================
+    // 管理者模式功能
+    // ==========================================
+    function saveSettingsAndGenerate() {
+      const gasUrl = document.getElementById('gasUrl').value.trim();
+      let audioUrl = document.getElementById('audioUrl').value.trim();
+
+      if (!gasUrl) {
+        alert("請輸入 GAS 部署網址！");
+        return;
+      }
+
+      // 移除 audioUrl 結尾的斜線
+      if (audioUrl.endsWith('/')) {
+        audioUrl = audioUrl.slice(0, -1);
+      }
+
+      // 儲存至 LocalStorage
+      localStorage.setItem('ew_gasUrl', gasUrl);
+      localStorage.setItem('ew_audioUrl', audioUrl);
+
+      // 產生內嵌碼 (使用更安全的網址擷取方式)
+      let currentUrl = window.location.href.split('?')[0];
+      
+      // 防呆檢查：如果在 AI 臨時環境中產生，給予警告
+      if (currentUrl.includes('usercontent.goog')) {
+        alert("⚠️ 提醒：您目前在 AI 臨時預覽環境中！\n\n請將此網頁上傳到您的 GitHub (例如 https://clive520.github.io/...) 後，在您自己的網頁上產生內嵌碼，否則學校網頁將無法讀取！");
+      }
+
+      const embedUrl = `${currentUrl}?embed=true&gas=${encodeURIComponent(gasUrl)}&audio=${encodeURIComponent(audioUrl)}`;
+      
+      const iframeCode = `<iframe src="${embedUrl}" width="100%" height="500px" style="border:none; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); max-width: 800px; margin: 0 auto; display: block;" allow="autoplay"></iframe>`;
+      
+      document.getElementById('embedCode').value = iframeCode;
+      
+      // 提示
+      const btn = document.querySelector('button[onclick="saveSettingsAndGenerate()"]');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已儲存並產生！';
+      btn.classList.replace('bg-blue-600', 'bg-green-600');
+      btn.classList.replace('hover:bg-blue-700', 'hover:bg-green-700');
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.replace('bg-green-600', 'bg-blue-600');
+        btn.classList.replace('hover:bg-green-700', 'hover:bg-blue-700');
+      }, 2000);
+    }
+
+    function clearSettings() {
+      if (confirm("確定要清除所有設定與紀錄嗎？")) {
+        localStorage.removeItem('ew_gasUrl');
+        localStorage.removeItem('ew_audioUrl');
+        document.getElementById('gasUrl').value = '';
+        document.getElementById('audioUrl').value = '';
+        document.getElementById('embedCode').value = '';
+      }
+    }
+
+    function copyEmbedCode() {
+      const code = document.getElementById('embedCode').value;
+      if (!code) {
+        alert("請先產生內嵌碼！");
+        return;
+      }
+      navigator.clipboard.writeText(code).then(() => {
+        alert("內嵌碼已複製！請貼上至學校網頁的 HTML 編輯區。");
+      }).catch(err => {
+        // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = code;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        alert("內嵌碼已複製！");
+      });
+    }
+
+    function copyGasCode() {
+      const code = document.getElementById('gasCodeDisplay').value;
+      navigator.clipboard.writeText(code).then(() => {
+        alert("GAS 程式碼已複製！");
+      }).catch(err => {
+         // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = code;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        alert("GAS 程式碼已複製！");
+      });
+    }
+
+    // ==========================================
+    // 內嵌模式 (Widget) 功能
+    // ==========================================
+    async function initWidget() {
+      if (!appSettings.gasUrl) {
+        showError("未設定資料來源 (GAS URL)。請系統管理員檢查內嵌碼。");
+        return;
+      }
+
+      try {
+        const response = await fetch(appSettings.gasUrl);
+        const result = await response.json();
+
+        if (result.status === "error") {
+          showError("讀取資料失敗：" + result.message);
+          return;
+        }
+
+        allData = result.data;
+
+        if (allData.length === 0) {
+          showError("試算表中目前沒有資料！");
+          return;
+        }
+
+        // 建立週次選單
+        buildWeekSelector();
+        
+        // 預設選擇最近的一週 (簡易邏輯：選擇陣列最後一筆，或依日期判斷)
+        // 這裡我們預設顯示第一筆，或由選單觸發
+        document.getElementById('weekSelector').selectedIndex = 0;
+        changeWeek();
+
+        // 隱藏 Loading
+        document.getElementById('loadingIndicator').classList.add('hidden');
+        document.getElementById('contentArea').classList.remove('hidden');
+
+      } catch (error) {
+        showError("連線至資料庫時發生錯誤，請稍後再試。");
+        console.error(error);
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('loadingIndicator').classList.add('hidden');
+      document.getElementById('contentArea').classList.add('hidden');
+      document.getElementById('errorIndicator').classList.remove('hidden');
+      document.getElementById('errorMessage').innerText = msg;
+    }
+
+    function buildWeekSelector() {
+      const selector = document.getElementById('weekSelector');
+      selector.innerHTML = ''; // 清空
+      
+      allData.forEach((row, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        // 顯示 第 X 週
+        option.textContent = `第 ${row['week']} 週`;
+        selector.appendChild(option);
+      });
+    }
+
+    function changeWeek() {
+      const selectedIndex = document.getElementById('weekSelector').value;
+      if (selectedIndex === "") return;
+      
+      currentWeekData = allData[selectedIndex];
+      
+      // 更新 Topic
+      document.getElementById('displayTopic').innerText = currentWeekData['Special Topic'] || '每週一句';
+      
+      // 建立並更新年級標籤
+      buildGradeTabs();
+      
+      // 渲染內容
+      renderContent();
+    }
+
+    function buildGradeTabs() {
+      const tabsContainer = document.getElementById('gradeTabs');
+      tabsContainer.innerHTML = '';
+      
+      const grades = [
+        { id: 'G1', name: '一年級' },
+        { id: 'G2', name: '二年級' },
+        { id: 'G3', name: '三年級' },
+        { id: 'G4', name: '四年級' },
+        { id: 'G5', name: '五年級' },
+        { id: 'G6', name: '六年級' }
+      ];
+
+      grades.forEach(grade => {
+        // 檢查該年級是否有資料 (至少要有英文句子)
+        if (currentWeekData[`${grade.id}英`]) {
+          const btn = document.createElement('button');
+          btn.className = `flex-1 py-3 px-4 text-center font-medium text-sm transition-colors duration-200 whitespace-nowrap focus:outline-none ${currentGrade === grade.id ? 'tab-active bg-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`;
+          btn.innerText = grade.name;
+          btn.onclick = () => {
+            currentGrade = grade.id;
+            buildGradeTabs(); // 重新渲染標籤以更新 Active 狀態
+            renderContent();
+          };
+          tabsContainer.appendChild(btn);
+        }
+      });
+
+      // 如果當前選擇的年級沒有資料，自動切換到第一個有資料的年級
+      if (!currentWeekData[`${currentGrade}英`] && tabsContainer.children.length > 0) {
+        currentGrade = grades.find(g => currentWeekData[`${g.id}英`]).id;
+        buildGradeTabs(); // 重新渲染
+        renderContent();
+      }
+    }
+
+    function renderContent() {
+      if (!currentWeekData) return;
+
+      const enText = currentWeekData[`${currentGrade}英`] || 'No content';
+      const zhText = currentWeekData[`${currentGrade}中`] || '無內容';
+      
+      document.getElementById('displayEn').innerText = enText;
+      document.getElementById('displayZh').innerText = zhText;
+
+      // 重置音訊狀態
+      const audioPlayer = document.getElementById('audioPlayer');
+      const errorMsg = document.getElementById('audioErrorMsg');
+      errorMsg.classList.add('hidden');
+      
+      // 組合音檔網址
+      let audioPath = currentWeekData[`${currentGrade}音`];
+      if (audioPath) {
+        // 如果來源路徑有最前面的斜線，且 base url 也有最後的斜線，要處理重複
+        if (appSettings.audioUrl && audioPath.startsWith('/')) {
+          audioPlayer.src = appSettings.audioUrl + audioPath;
+        } else if (appSettings.audioUrl) {
+          audioPlayer.src = appSettings.audioUrl + '/' + audioPath;
+        } else {
+          // 沒有設定 baseUrl 時，直接使用相對路徑(測試用)或原始字串
+          audioPlayer.src = audioPath;
+        }
+        document.getElementById('playBtn').disabled = false;
+        document.getElementById('playBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        audioPlayer.src = "";
+        document.getElementById('playBtn').disabled = true;
+        document.getElementById('playBtn').classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function playAudio() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const errorMsg = document.getElementById('audioErrorMsg');
+      const icon = document.querySelector('#playBtn i');
+      
+      if (!audioPlayer.src || audioPlayer.src.endsWith('undefined')) {
+         errorMsg.classList.remove('hidden');
+         return;
+      }
+
+      errorMsg.classList.add('hidden');
+      
+      // 變更圖示狀態
+      icon.classList.remove('fa-volume-up');
+      icon.classList.add('fa-spinner', 'fa-spin');
+
+      audioPlayer.play().then(() => {
+        icon.classList.remove('fa-spinner', 'fa-spin');
+        icon.classList.add('fa-volume-up');
+      }).catch(err => {
+        console.error("播放音檔失敗:", err);
+        icon.classList.remove('fa-spinner', 'fa-spin');
+        icon.classList.add('fa-volume-up');
+        errorMsg.classList.remove('hidden');
+      });
+    }
+
+  </script>
+</body>
+</html>
