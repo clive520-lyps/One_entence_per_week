@@ -182,8 +182,14 @@
               <div class="flex justify-between items-center px-1">
                 <span id="currentTime" class="text-xs text-gray-500 font-mono font-medium">0:00</span>
                 <div class="flex items-center gap-2">
-                  <!-- 語速控制 -->
-                  <button id="speedBtn" onclick="cycleSpeed()" title="調整語速" class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded hover:bg-blue-200 transition">1.0x</button>
+                  <!-- 語速控制 (一排按鈕) -->
+                  <div id="speedControls" class="flex items-center bg-gray-200 rounded p-0.5 gap-0.5 shadow-inner">
+                    <button onclick="setSpeed(0.5)" class="speed-btn px-1.5 py-0.5 text-[10px] rounded text-gray-500 hover:text-gray-800 transition" data-speed="0.5">0.5x</button>
+                    <button onclick="setSpeed(0.75)" class="speed-btn px-1.5 py-0.5 text-[10px] rounded text-gray-500 hover:text-gray-800 transition" data-speed="0.75">0.75x</button>
+                    <button onclick="setSpeed(1.0)" class="speed-btn px-1.5 py-0.5 text-[10px] rounded bg-white shadow-sm text-blue-600 font-bold transition active-speed" data-speed="1">1.0x</button>
+                    <button onclick="setSpeed(1.25)" class="speed-btn px-1.5 py-0.5 text-[10px] rounded text-gray-500 hover:text-gray-800 transition" data-speed="1.25">1.25x</button>
+                    <button onclick="setSpeed(1.5)" class="speed-btn px-1.5 py-0.5 text-[10px] rounded text-gray-500 hover:text-gray-800 transition" data-speed="1.5">1.5x</button>
+                  </div>
                   <span id="durationTime" class="text-xs text-gray-500 font-mono font-medium">0:00</span>
                 </div>
               </div>
@@ -214,8 +220,7 @@
     };
 
     // 音訊播放器相關變數
-    const playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5];
-    let currentSpeedIdx = 2; // 預設 1.0x
+    let currentPlaybackSpeed = 1.0; // 預設語速 1.0x
 
     // 完整的 GAS 程式碼字串 (供管理者複製)
     const GAS_CODE_TEMPLATE = `function doGet(e) {
@@ -449,8 +454,9 @@
       allData.forEach((row, index) => {
         const option = document.createElement('option');
         option.value = index;
-        // 顯示 第 X 週
-        option.textContent = `第 ${row['week']} 週`;
+        // 顯示日期，若無日期則 fallback 顯示週次
+        const dateStr = row['日期'];
+        option.textContent = dateStr ? dateStr : `第 ${row['week']} 週`;
         selector.appendChild(option);
       });
     }
@@ -621,7 +627,7 @@
       audioPlayer.addEventListener('loadedmetadata', () => {
         durationTimeDisplay.innerText = formatTime(audioPlayer.duration);
         // 保持原先設定的語速
-        audioPlayer.playbackRate = playbackSpeeds[currentSpeedIdx];
+        audioPlayer.playbackRate = currentPlaybackSpeed;
       });
 
       // 播放結束重置
@@ -676,15 +682,26 @@
       }
     }
 
-    function cycleSpeed() {
+    function setSpeed(speed) {
       const audioPlayer = document.getElementById('audioPlayer');
-      const speedBtn = document.getElementById('speedBtn');
+      currentPlaybackSpeed = speed;
       
-      currentSpeedIdx = (currentSpeedIdx + 1) % playbackSpeeds.length;
-      const newSpeed = playbackSpeeds[currentSpeedIdx];
+      // 若目前有音檔，直接更改語速
+      if (audioPlayer) {
+        audioPlayer.playbackRate = speed;
+      }
       
-      audioPlayer.playbackRate = newSpeed;
-      speedBtn.innerText = newSpeed.toFixed(1) + 'x';
+      // 更新按鈕 UI 狀態 (將點選的按鈕變為白色高亮，其他變回灰色)
+      const buttons = document.querySelectorAll('.speed-btn');
+      buttons.forEach(btn => {
+        if (parseFloat(btn.dataset.speed) === speed) {
+          btn.classList.add('bg-white', 'shadow-sm', 'text-blue-600', 'font-bold', 'active-speed');
+          btn.classList.remove('text-gray-500', 'hover:text-gray-800');
+        } else {
+          btn.classList.remove('bg-white', 'shadow-sm', 'text-blue-600', 'font-bold', 'active-speed');
+          btn.classList.add('text-gray-500', 'hover:text-gray-800');
+        }
+      });
     }
 
     function formatTime(seconds) {
